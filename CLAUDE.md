@@ -50,6 +50,12 @@ Regras ao mexer nisso:
 - Timelines GSAP são criadas em `useLayoutEffect` e **mortas no cleanup** (`tl.kill()`); não use `gsap.context().revert()` em objetos three. O app roda em `StrictMode`, então os efeitos executam duas vezes em dev.
 - A cor do material é definida só na montagem (`initialColor`); mudanças posteriores são interpoladas via `gsap.to(material.color, …)`. Não passe a cor reativa como prop do material, senão o tween é sobrescrito.
 
+## Idioma (padrão do repositório)
+
+- **Em inglês:** mensagens de commit, `README.md`, descrição/tópicos do GitHub, títulos e descrições de PR/issues.
+- Commits seguem Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`…).
+- Os textos da interface do app continuam em **português (pt-BR)**.
+
 ## Convenções
 
 - Selecione estado do Zustand com seletores granulares (`useStockStore((s) => s.x)`). Seletores que criam arrays/objetos novos precisam de `useMemo` ou `useShallow`.

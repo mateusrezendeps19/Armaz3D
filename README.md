@@ -1,44 +1,82 @@
-# Estoque 3D
+# Armaz3D
 
-Aplicativo desktop (Electron + React + TypeScript) para gestão de estoque com visualização 3D interativa do galpão (React Three Fiber + drei), animações GSAP e estado global em Zustand.
+**Desktop inventory management with an interactive 3D warehouse.**
 
-## Rodando
+Armaz3D renders your warehouse in real time: aisles, racks, shelf levels and the boxes/pallets in each slot. Stock levels show up as colours, and goods animate in and out as you receive and ship them. It is built with Electron, React, TypeScript and React Three Fiber.
+
+> The app's interface is in Brazilian Portuguese (pt-BR).
+
+## Features
+
+- **3D warehouse scene**: industrial floor grid, pallet racks with addressable slots, a receiving dock, realistic lighting with shadows, and an orbit camera with zoom and angle limits.
+- **Status colours**: green = available, yellow = low stock, red = critical/empty.
+- **Occupancy heatmap**: switch to a heatmap where each box gradually shifts from cold to hot according to how full its slot is.
+- **Hover and click (raycasting)**: hovering or clicking a box makes it glow and shows an outline, and opens a details panel (SKU, name, quantity, address). The camera glides to the selected item.
+- **Animated stock movements (GSAP)**:
+  - *Inbound*: the box spawns at the receiving dock, travels down the central lane, slides to its rack, lifts to its level and slots in.
+  - *Outbound*: the box pulls out, rises, shrinks and fades away.
+- **Inventory overlay**: an inbound form (automatic slot, manual address, or click an empty slot in 3D), a searchable inventory list synced with the 3D highlight, and quantity adjustments.
+- **Persistence**: stock is saved locally between sessions, and one click restores the demo data.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Desktop shell | Electron 33 |
+| UI | React 18 + TypeScript (strict), Vite 5 |
+| 3D | three.js 0.169, @react-three/fiber 8, @react-three/drei 9 |
+| Animation | GSAP 3 |
+| State | Zustand 4 (with `persist`) |
+| Styling | Tailwind CSS 3, lucide-react icons |
+
+## Getting started
+
+Requires Node.js 20+.
 
 ```bash
 npm install
-npm run dev        # Vite + janela Electron com hot reload
-npm run dev:web    # somente no navegador (http://127.0.0.1:5173)
-npm run build      # typecheck + build de produção em dist/
-npm start          # abre o build de produção no Electron
-npm run dist       # gera o instalador Windows (release/)
+npm run dev        # Vite dev server + Electron window with hot reload
 ```
 
-> npm ≥ 11 bloqueia scripts de instalação: `electron` e `esbuild` já estão liberados em `allowScripts` no `package.json`.
+| Script | Description |
+| --- | --- |
+| `npm run dev` | Run the desktop app in development mode |
+| `npm run dev:web` | Run in the browser only (http://127.0.0.1:5173) |
+| `npm run typecheck` | TypeScript type check |
+| `npm run build` | Type check and production build to `dist/` |
+| `npm start` | Open the production build in Electron |
+| `npm run dist` | Build the Windows installer to `release/` |
 
-## Estrutura
+> npm 11+ blocks install scripts by default. `electron` and `esbuild` are already allowed through `allowScripts` in `package.json`.
+
+## Project structure
 
 ```
-electron/main.cjs                     Processo principal (janela, segurança)
+electron/main.cjs                 Electron main process (window, security settings)
 src/
-  types/stock.ts                      Tipos do domínio (Rack, StockItem, SlotAddress…)
-  lib/warehouseLayout.ts              Dimensões, endereço → coordenada 3D, cores de status/heatmap
-  data/seed.ts                        Galpão de demonstração (3 ruas × 2 estantes × 4 níveis × 4 posições)
-  store/useStockStore.ts              Zustand: itens, CRUD, seleção, modo de visualização (persistido)
+  types/stock.ts                  Domain types (Rack, StockItem, SlotAddress, ...)
+  lib/warehouseLayout.ts          Scene dimensions, slot address to 3D position, status/heatmap colours
+  data/seed.ts                    Demo warehouse: 3 aisles x 2 racks x 4 levels x 4 slots (96 slots)
+  store/useStockStore.ts          Zustand store: items, CRUD, selection, view mode (persisted)
   components/three/
-    WarehouseScene.tsx                Canvas, luzes com sombra, piso + grid, OrbitControls, foco de câmera
-    Rack3D.tsx                        Estante porta-paletes + nichos clicáveis no modo de posicionamento
-    RackItem3D.tsx                    Caixa: cor dinâmica, hover/click com brilho e contorno, animações
-    ReceivingDock.tsx                 Doca de recebimento e corredor central de transporte
+    WarehouseScene.tsx            Canvas, lights, floor, OrbitControls, camera focus
+    Rack3D.tsx                    Pallet rack and clickable slot markers
+    RackItem3D.tsx                Box: dynamic colour, hover/click glow, GSAP animations
+    ReceivingDock.tsx             Receiving dock and central transit lane
   components/ui/
-    DashboardUI.tsx                   Overlay 2D (compõe os painéis abaixo)
-    TopBar / AddItemForm / InventoryList / ItemDetailsPanel / Legend
+    DashboardUI.tsx               2D overlay that composes the panels below
+    TopBar, AddItemForm, InventoryList, ItemDetailsPanel, Legend
 ```
 
-## Como funciona
+## How it works
 
-- **Endereçamento:** cada nicho é `{ rackId, level, slot }` → exibido como `Rua A · Estante 02 · Nível 3 · Posição 1` (código `A-02-3-1`). `slotWorldPosition()` converte o endereço para coordenadas da cena.
-- **Status:** verde = disponível, amarelo = `quantidade ≤ mínimo`, vermelho = `quantidade ≤ mínimo/2` ou zerado.
-- **Heatmap:** cor pela ocupação do nicho (`quantidade / capacidade`), com transição gradual de cor via GSAP.
-- **Entrada:** `addItem()` cria o item na fase `entering`; a caixa surge na doca, percorre o corredor central, desliza até a frente do nicho, sobe e encaixa. Ao final, `markIdle()`.
-- **Saída:** `removeItem()` marca `leaving`; a caixa sai da prateleira, eleva-se, encolhe e some. Ao final, `finalizeRemoval()` apaga o registro.
-- **Persistência:** o estoque fica salvo no `localStorage` da janela; o botão ↺ restaura os dados de demonstração.
+- **Addressing**: each slot is `{ rackId, level, slot }`, displayed as *Rua A · Estante 02 · Nível 3 · Posição 1* (code `A-02-3-1`). `slotWorldPosition()` maps an address to scene coordinates.
+- **Status rules**: *low* when `quantity <= minQuantity`. *Critical* when `quantity <= minQuantity / 2` or the slot is empty.
+- **Heatmap**: slot occupancy is `quantity / capacity`, and colour changes are tweened with GSAP.
+- **Animation lifecycle**: every item has a `phase` (`entering` → `idle` → `leaving`). The store changes the phase, and `RackItem3D` plays the animation and reports back:
+  - an inbound animation ends with `markIdle()`;
+  - an outbound animation ends with `finalizeRemoval()`, which actually deletes the record.
+
+## License
+
+No license specified yet.
