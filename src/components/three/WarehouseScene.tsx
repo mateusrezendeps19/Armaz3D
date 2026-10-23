@@ -12,8 +12,8 @@ import { ReceivingDock } from './ReceivingDock';
 
 const BACKGROUND = '#0b1120';
 const INITIAL_CAMERA: Vec3 = [7, 13, 21];
-// Alvo deslocado à esquerda para compensar o painel lateral do overlay
-const INITIAL_TARGET: Vec3 = [-2.5, 1, 1.5];
+// Alvo deslocado à esquerda para compensar o menu e painel lateral do overlay
+const INITIAL_TARGET: Vec3 = [-4.5, 1, 1.5];
 const FLOOR_SIZE = 40;
 
 /** Canvas principal: luzes com sombra, piso industrial, câmera orbital e o conteúdo do estoque. */

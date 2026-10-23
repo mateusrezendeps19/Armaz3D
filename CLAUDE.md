@@ -29,7 +29,10 @@ npm ≥ 11 bloqueia install scripts: `electron` e `esbuild` estão liberados em 
 - `src/lib/warehouseLayout.ts`: dimensões da cena, conversão endereço → coordenada (`slotWorldPosition`), formatação de endereço e regras de cor (`getStatus`, `heatmapColor`). Toda geometria e cor deve vir daqui, sem números mágicos nos componentes.
 - `src/data/seed.ts`: galpão de demonstração (3 ruas × 2 estantes × 4 níveis × 4 posições) e produtos de exemplo.
 - `src/components/three/`: `WarehouseScene` (Canvas, luzes, piso, OrbitControls, `CameraFocus`), `Rack3D` (estrutura + marcadores de nicho), `RackItem3D` (caixa animada), `ReceivingDock`.
-- `src/components/ui/`: `DashboardUI` compõe os painéis do overlay. A raiz é `pointer-events-none z-10` e cada painel reativa com `pointer-events-auto` (o `Panel` já faz isso).
+- `src/components/ui/`: `DashboardUI` compõe o overlay. A raiz é `pointer-events-none z-10` e cada painel reativa com `pointer-events-auto` (o `Panel` já faz isso). Layout: `Sidebar` (recolhível, Ctrl+B) | `TopBar` + coluna da aba ativa (`tabs/DashboardTab`, `InboundTab`, `OutboundTab`, mapeadas em `TAB_CONTENT`) | `ItemDetailsPanel` + `Legend`. Para criar uma aba: adicione o id em `AppTab`, uma entrada em `TABS` (`Sidebar.tsx`) e o componente em `TAB_CONTENT`.
+- `src/hooks/useStockStats.ts`: KPIs derivados (ocupação, unidades, contagem por status, alertas). Reutilize em vez de recalcular nos componentes.
+- Histórico: `movements` no store (mais recente primeiro, limitado a 200). `addItem` (receipt), `adjustQuantity` (restock/withdrawal) e `removeItem` (removal) registram automaticamente. Toda mudança de quantidade deve passar por essas ações para entrar no histórico; `updateItem` não registra.
+- `activeTab` e `sidebarCollapsed` são persistidos; `setActiveTab` desliga o `placementMode`.
 
 ## Conceitos de domínio
 

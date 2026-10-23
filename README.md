@@ -15,7 +15,11 @@ Armaz3D renders your warehouse in real time: aisles, racks, shelf levels and the
 - **Animated stock movements (GSAP)**:
   - *Inbound*: the box spawns at the receiving dock, travels down the central lane, slides to its rack, lifts to its level and slots in.
   - *Outbound*: the box pulls out, rises, shrinks and fades away.
-- **Inventory overlay**: an inbound form (automatic slot, manual address, or click an empty slot in 3D), a searchable inventory list synced with the 3D highlight, and quantity adjustments.
+- **Collapsible sidebar** (`Ctrl+B`) with three workspaces:
+  - *Dashboard*: KPIs (pallets, units, slot occupancy, alerts), a status breakdown, a restock alert list and a searchable inventory synced with the 3D highlight.
+  - *Inbound (Entradas)*: a receiving form (automatic slot, manual address, or click an empty slot in 3D) and the inbound history.
+  - *Outbound (Saídas)*: partial withdrawals or full pallet removal for the selected item, and the outbound history.
+- **Movement history**: every receipt, restock, withdrawal and removal is logged with quantity, address and timestamp.
 - **Persistence**: stock is saved locally between sessions, and one click restores the demo data.
 
 ## Tech stack
@@ -57,15 +61,18 @@ src/
   types/stock.ts                  Domain types (Rack, StockItem, SlotAddress, ...)
   lib/warehouseLayout.ts          Scene dimensions, slot address to 3D position, status/heatmap colours
   data/seed.ts                    Demo warehouse: 3 aisles x 2 racks x 4 levels x 4 slots (96 slots)
-  store/useStockStore.ts          Zustand store: items, CRUD, selection, view mode (persisted)
+  store/useStockStore.ts          Zustand store: items, CRUD, movement log, navigation, view mode (persisted)
+  hooks/useStockStats.ts          Derived KPIs shared by the sidebar, top bar and dashboard
   components/three/
     WarehouseScene.tsx            Canvas, lights, floor, OrbitControls, camera focus
     Rack3D.tsx                    Pallet rack and clickable slot markers
     RackItem3D.tsx                Box: dynamic colour, hover/click glow, GSAP animations
     ReceivingDock.tsx             Receiving dock and central transit lane
   components/ui/
-    DashboardUI.tsx               2D overlay that composes the panels below
-    TopBar, AddItemForm, InventoryList, ItemDetailsPanel, Legend
+    DashboardUI.tsx               2D overlay: sidebar + top bar + active tab + details panel
+    Sidebar.tsx                   Collapsible navigation (Dashboard / Entradas / Saídas)
+    tabs/                         DashboardTab, InboundTab, OutboundTab
+    TopBar, AddItemForm, InventoryList, MovementList, ItemDetailsPanel, Legend
 ```
 
 ## How it works

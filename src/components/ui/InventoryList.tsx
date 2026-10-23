@@ -31,7 +31,7 @@ export function InventoryList() {
     <Panel
       title="Inventário"
       icon={<ListChecks size={16} className="text-cyan-400" />}
-      actions={<span className="text-[11px] text-slate-400">{rows.length} itens</span>}
+      actions={<span className="text-[11px] text-slate-400">{rows.length} {rows.length === 1 ? 'item' : 'itens'}</span>}
       className="flex min-h-0 flex-1 flex-col [&>div]:flex [&>div]:min-h-0 [&>div]:flex-1 [&>div]:flex-col"
     >
       <div className="relative mb-2">

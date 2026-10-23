@@ -58,3 +58,24 @@ export type ItemPatch = Partial<
 >;
 
 export type MutationResult = { ok: true; id: string } | { ok: false; error: string };
+
+export type MovementType = 'in' | 'out';
+
+/** receipt = entrada de palete novo · restock = reposição · withdrawal = baixa parcial · removal = retirada do palete. */
+export type MovementReason = 'receipt' | 'restock' | 'withdrawal' | 'removal';
+
+/** Registro do histórico de entradas e saídas (snapshot do item no momento da movimentação). */
+export interface Movement {
+  id: string;
+  type: MovementType;
+  reason: MovementReason;
+  itemId: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  /** Código do endereço, ex.: "A-02-3-1". */
+  address: string;
+  at: number;
+}
+
+export type AppTab = 'dashboard' | 'inbound' | 'outbound';

@@ -1,9 +1,13 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { SEED_RACKS, createSeedItems } from '../data/seed';
-import { sameSlot } from '../lib/warehouseLayout';
+import { addressCode, sameSlot } from '../lib/warehouseLayout';
 import type {
+  AppTab,
   ItemPatch,
+  Movement,
+  MovementReason,
+  MovementType,
   MutationResult,
   NewItemInput,
   Rack,
@@ -15,7 +19,11 @@ import type {
 interface PersistedState {
   racks: Rack[];
   items: StockItem[];
+  /** Histórico de entradas/saídas, mais recente primeiro. */
+  movements: Movement[];
   viewMode: ViewMode;
+  activeTab: AppTab;
+  sidebarCollapsed: boolean;
 }
 
 export interface StockState extends PersistedState {
@@ -30,7 +38,8 @@ export interface StockState extends PersistedState {
   /** Cria o item na fase 'entering' (dispara a animação de entrada). */
   addItem: (input: NewItemInput) => MutationResult;
   updateItem: (id: string, patch: ItemPatch) => MutationResult;
-  adjustQuantity: (id: string, delta: number) => void;
+  /** Reposição (delta > 0) ou baixa (delta < 0), limitada a [0, capacidade]. Retorna o delta aplicado. */
+  adjustQuantity: (id: string, delta: number) => number;
   /** Marca o item como 'leaving'; a cena chama finalizeRemoval ao fim da animação. */
   removeItem: (id: string) => void;
   finalizeRemoval: (id: string) => void;
@@ -48,10 +57,37 @@ export interface StockState extends PersistedState {
   setTargetSlot: (addr: SlotAddress | null) => void;
   setPlacementMode: (on: boolean) => void;
   setViewMode: (mode: ViewMode) => void;
+  setActiveTab: (tab: AppTab) => void;
+  toggleSidebar: () => void;
   resetDemo: () => void;
 }
 
 const newId = () => crypto.randomUUID();
+
+const MAX_MOVEMENTS = 200;
+
+function logMovement(
+  movements: Movement[],
+  racks: Rack[],
+  item: StockItem,
+  type: MovementType,
+  reason: MovementReason,
+  quantity: number,
+): Movement[] {
+  const rack = racks.find((r) => r.id === item.location.rackId);
+  const entry: Movement = {
+    id: newId(),
+    type,
+    reason,
+    itemId: item.id,
+    sku: item.sku,
+    name: item.name,
+    quantity,
+    address: rack ? addressCode(rack, item.location) : '?',
+    at: Date.now(),
+  };
+  return [entry, ...movements].slice(0, MAX_MOVEMENTS);
+}
 
 function validate(fields: Pick<StockItem, 'sku' | 'name' | 'quantity' | 'capacity' | 'minQuantity'>): string | null {
   if (!fields.sku.trim()) return 'Informe o SKU.';
@@ -68,7 +104,10 @@ export const useStockStore = create<StockState>()(
     (set, get) => ({
       racks: SEED_RACKS,
       items: createSeedItems(),
+      movements: [],
       viewMode: 'status',
+      activeTab: 'dashboard',
+      sidebarCollapsed: false,
       selectedId: null,
       hoveredId: null,
       targetSlot: null,
@@ -95,7 +134,11 @@ export const useStockStore = create<StockState>()(
           phase: 'entering',
           createdAt: Date.now(),
         };
-        set((s) => ({ items: [...s.items, item], selectedId: item.id }));
+        set((s) => ({
+          items: [...s.items, item],
+          movements: logMovement(s.movements, s.racks, item, 'in', 'receipt', item.quantity),
+          selectedId: item.id,
+        }));
         return { ok: true, id: item.id };
       },
 
@@ -109,19 +152,36 @@ export const useStockStore = create<StockState>()(
         return { ok: true, id };
       },
 
-      adjustQuantity: (id, delta) =>
+      adjustQuantity: (id, delta) => {
+        const item = get().getItem(id);
+        if (!item || item.phase === 'leaving') return 0;
+        const quantity = Math.min(Math.max(item.quantity + delta, 0), item.capacity);
+        const applied = quantity - item.quantity;
+        if (applied === 0) return 0;
         set((s) => ({
-          items: s.items.map((i) =>
-            i.id === id ? { ...i, quantity: Math.min(Math.max(i.quantity + delta, 0), i.capacity) } : i,
+          items: s.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
+          movements: logMovement(
+            s.movements,
+            s.racks,
+            item,
+            applied > 0 ? 'in' : 'out',
+            applied > 0 ? 'restock' : 'withdrawal',
+            Math.abs(applied),
           ),
-        })),
+        }));
+        return applied;
+      },
 
-      removeItem: (id) =>
+      removeItem: (id) => {
+        const item = get().getItem(id);
+        if (!item || item.phase === 'leaving') return;
         set((s) => ({
-          items: s.items.map((i) => (i.id === id && i.phase !== 'leaving' ? { ...i, phase: 'leaving' } : i)),
+          items: s.items.map((i) => (i.id === id ? { ...i, phase: 'leaving' } : i)),
+          movements: logMovement(s.movements, s.racks, item, 'out', 'removal', item.quantity),
           selectedId: s.selectedId === id ? null : s.selectedId,
           hoveredId: s.hoveredId === id ? null : s.hoveredId,
-        })),
+        }));
+      },
 
       finalizeRemoval: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
 
@@ -154,11 +214,15 @@ export const useStockStore = create<StockState>()(
       setTargetSlot: (addr) => set({ targetSlot: addr }),
       setPlacementMode: (on) => set({ placementMode: on }),
       setViewMode: (mode) => set({ viewMode: mode }),
+      // O modo de posicionamento só faz sentido na aba de entradas.
+      setActiveTab: (tab) => set({ activeTab: tab, placementMode: false }),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
       resetDemo: () =>
         set({
           racks: SEED_RACKS,
           items: createSeedItems(),
+          movements: [],
           selectedId: null,
           hoveredId: null,
           targetSlot: null,
@@ -169,7 +233,14 @@ export const useStockStore = create<StockState>()(
       name: 'estoque-3d',
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s): PersistedState => ({ racks: s.racks, items: s.items, viewMode: s.viewMode }),
+      partialize: (s): PersistedState => ({
+        racks: s.racks,
+        items: s.items,
+        movements: s.movements,
+        viewMode: s.viewMode,
+        activeTab: s.activeTab,
+        sidebarCollapsed: s.sidebarCollapsed,
+      }),
       // Animações interrompidas pelo fechamento do app são concluídas ao reabrir.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PersistedState>;

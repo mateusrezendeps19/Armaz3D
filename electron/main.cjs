@@ -9,7 +9,7 @@ function createWindow() {
     height: 920,
     minWidth: 1100,
     minHeight: 700,
-    title: 'Estoque 3D',
+    title: 'Armaz3D',
     backgroundColor: '#0b1120',
     autoHideMenuBar: true,
     show: false,

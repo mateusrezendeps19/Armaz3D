@@ -1,28 +1,45 @@
-import { AddItemForm } from './AddItemForm';
-import { InventoryList } from './InventoryList';
+import type { ComponentType } from 'react';
+import { useStockStore } from '../../store/useStockStore';
+import type { AppTab } from '../../types/stock';
 import { ItemDetailsPanel } from './ItemDetailsPanel';
 import { Legend } from './Legend';
+import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { DashboardTab } from './tabs/DashboardTab';
+import { InboundTab } from './tabs/InboundTab';
+import { OutboundTab } from './tabs/OutboundTab';
+
+const TAB_CONTENT: Record<AppTab, ComponentType> = {
+  dashboard: DashboardTab,
+  inbound: InboundTab,
+  outbound: OutboundTab,
+};
 
 /**
  * Overlay 2D sobre o Canvas. A raiz ignora o ponteiro (a cena 3D continua recebendo
  * eventos); cada painel reativa os eventos com `pointer-events-auto`.
  */
 export function DashboardUI() {
+  const activeTab = useStockStore((s) => s.activeTab);
+  const TabContent = TAB_CONTENT[activeTab];
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col gap-3 p-3">
-      <TopBar />
+    <div className="pointer-events-none absolute inset-0 z-10 flex">
+      <Sidebar />
 
-      <div className="flex min-h-0 flex-1 gap-3">
-        <aside className="flex min-h-0 w-[22rem] flex-col gap-3">
-          <AddItemForm />
-          <InventoryList />
-        </aside>
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-3">
+        <TopBar />
 
-        <div className="flex flex-1 flex-col items-end justify-between">
-          <ItemDetailsPanel />
-          <div className="mt-auto">
-            <Legend />
+        <div className="flex min-h-0 flex-1 gap-3">
+          <aside key={activeTab} className="flex min-h-0 w-[22rem] shrink-0 flex-col gap-3">
+            <TabContent />
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col items-end">
+            <ItemDetailsPanel />
+            <div className="mt-auto">
+              <Legend />
+            </div>
           </div>
         </div>
       </div>
