@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Minus, PackageMinus, Plus, X } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
+import { usePermission } from '../../hooks/useAuth';
 import { STATUS_META, formatAddress, getOccupancy, getStatus } from '../../lib/warehouseLayout';
 import { Panel, inputClass } from './Panel';
 
@@ -13,6 +14,7 @@ export function ItemDetailsPanel() {
   const adjustQuantity = useStockStore((s) => s.adjustQuantity);
   const removeItem = useStockStore((s) => s.removeItem);
   const selectItem = useStockStore((s) => s.selectItem);
+  const canWrite = usePermission('stock:write');
   const [amount, setAmount] = useState('10');
 
   if (!item || !rack || item.phase === 'leaving') return null;
@@ -77,7 +79,7 @@ export function ItemDetailsPanel() {
           {formatAddress(rack, item.location)}
         </div>
 
-        {!isPreview && (
+        {!isPreview && canWrite && (
           <>
             <div className="flex items-center gap-2">
               <button

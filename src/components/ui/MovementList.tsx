@@ -1,15 +1,9 @@
 import { useMemo } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, History } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
-import type { MovementReason, MovementType } from '../../types/stock';
+import { REASON_LABEL } from '../../lib/exportLog';
+import type { MovementType } from '../../types/stock';
 import { Panel } from './Panel';
-
-const REASON_LABEL: Record<MovementReason, string> = {
-  receipt: 'Recebimento',
-  restock: 'Reposição',
-  withdrawal: 'Baixa parcial',
-  removal: 'Retirada do palete',
-};
 
 const timeFormat = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -61,7 +55,7 @@ export function MovementList({ type, title, className = '' }: MovementListProps)
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-slate-100">{m.name}</span>
                   <span className="block truncate text-[11px] text-slate-400">
-                    {REASON_LABEL[m.reason]} · {m.sku} · {m.address}
+                    {REASON_LABEL[m.reason]} · {m.sku} · {m.address} · {m.userName}
                   </span>
                 </span>
                 <span className="text-right">

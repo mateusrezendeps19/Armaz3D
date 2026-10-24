@@ -4,28 +4,41 @@ import {
   ArrowUpFromLine,
   ChevronsLeft,
   ChevronsRight,
+  KeyRound,
   LayoutDashboard,
+  LogOut,
   RotateCcw,
+  ScrollText,
+  UserCog,
   Warehouse,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
 import { useStockStats } from '../../hooks/useStockStats';
+import { useActiveTab, useCurrentUser, usePermission } from '../../hooks/useAuth';
+import { ROLE_META, canOpenTab } from '../../lib/auth';
 import type { AppTab } from '../../types/stock';
+import { UserAvatar } from './UserAvatar';
 
 export const TABS: Array<{ id: AppTab; label: string; description: string; icon: LucideIcon }> = [
   { id: 'dashboard', label: 'Dashboard', description: 'Visão geral do galpão', icon: LayoutDashboard },
   { id: 'inbound', label: 'Entradas', description: 'Recebimento e endereçamento', icon: ArrowDownToLine },
   { id: 'outbound', label: 'Saídas', description: 'Baixas e retirada de paletes', icon: ArrowUpFromLine },
+  { id: 'audit', label: 'Registros', description: 'Movimentações por usuário e exportação', icon: ScrollText },
+  { id: 'users', label: 'Usuários', description: 'Contas, perfis e acessos', icon: UserCog },
 ];
 
 /** Navegação principal, recolhível (Ctrl+B). Recolhida, mostra só os ícones. */
 export function Sidebar() {
-  const activeTab = useStockStore((s) => s.activeTab);
+  const activeTab = useActiveTab();
   const collapsed = useStockStore((s) => s.sidebarCollapsed);
   const setActiveTab = useStockStore((s) => s.setActiveTab);
   const toggleSidebar = useStockStore((s) => s.toggleSidebar);
   const resetDemo = useStockStore((s) => s.resetDemo);
+  const logout = useStockStore((s) => s.logout);
+  const setPasswordDialogOpen = useStockStore((s) => s.setPasswordDialogOpen);
+  const user = useCurrentUser();
+  const canReset = usePermission('system:reset');
   const { alerts } = useStockStats();
 
   useEffect(() => {
@@ -58,7 +71,7 @@ export function Sidebar() {
       </div>
 
       <ul className="flex-1 space-y-1 p-2">
-        {TABS.map(({ id, label, icon: Icon }) => {
+        {TABS.filter((t) => canOpenTab(user, t.id)).map(({ id, label, icon: Icon }) => {
           const active = id === activeTab;
           const badge = badges[id];
           return (
@@ -93,12 +106,30 @@ export function Sidebar() {
       </ul>
 
       <div className="space-y-1 border-t border-slate-800 p-2">
-        <SidebarAction
-          icon={RotateCcw}
-          label="Restaurar demonstração"
-          collapsed={collapsed}
-          onClick={resetDemo}
-        />
+        {user && (
+          <div className="flex h-11 items-center gap-3 overflow-hidden px-1.5" title={collapsed ? `${user.name} · ${ROLE_META[user.role].label}` : undefined}>
+            <UserAvatar user={user} size="h-8 w-8" />
+            <div className={`min-w-0 leading-tight transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
+              <p className="truncate text-xs font-semibold text-slate-100">{user.name}</p>
+              <p className="truncate text-[11px]" style={{ color: ROLE_META[user.role].color }}>
+                {ROLE_META[user.role].label}
+              </p>
+            </div>
+          </div>
+        )}
+        <SidebarAction icon={KeyRound} label="Alterar senha" collapsed={collapsed} onClick={() => setPasswordDialogOpen(true)} />
+        <SidebarAction icon={LogOut} label="Sair" collapsed={collapsed} onClick={logout} />
+      </div>
+
+      <div className="space-y-1 border-t border-slate-800 p-2">
+        {canReset && (
+          <SidebarAction
+            icon={RotateCcw}
+            label="Restaurar demonstração"
+            collapsed={collapsed}
+            onClick={resetDemo}
+          />
+        )}
         <SidebarAction
           icon={collapsed ? ChevronsRight : ChevronsLeft}
           label="Recolher menu"

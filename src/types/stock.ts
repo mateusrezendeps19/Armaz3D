@@ -76,6 +76,42 @@ export interface Movement {
   /** Código do endereço, ex.: "A-02-3-1". */
   address: string;
   at: number;
+  /** Responsável pela movimentação (null em registros anteriores ao controle de usuários). */
+  userId: string | null;
+  /** Snapshot do nome do responsável, mantido mesmo se o usuário for renomeado. */
+  userName: string;
 }
 
-export type AppTab = 'dashboard' | 'inbound' | 'outbound';
+export type AppTab = 'dashboard' | 'inbound' | 'outbound' | 'audit' | 'users';
+
+/** admin = acesso total · operator = movimenta estoque · viewer = somente consulta. */
+export type UserRole = 'admin' | 'operator' | 'viewer';
+
+/** stock:write = entradas/saídas · users:manage = gestão de usuários · audit:all = registros de todos · system:reset = restaurar demo. */
+export type Permission = 'stock:write' | 'users:manage' | 'audit:all' | 'system:reset';
+
+export interface User {
+  id: string;
+  /** Nome exibido. */
+  name: string;
+  /** Login, minúsculo e único. */
+  username: string;
+  role: UserRole;
+  active: boolean;
+  /** PBKDF2-SHA256 em hex. */
+  passwordHash: string;
+  salt: string;
+  /** Força a troca de senha no próximo acesso (usuário inicial ou senha redefinida). */
+  mustChangePassword: boolean;
+  createdAt: number;
+  lastLoginAt: number | null;
+}
+
+export interface NewUserInput {
+  name: string;
+  username: string;
+  role: UserRole;
+  password: string;
+}
+
+export type UserPatch = Partial<Pick<User, 'name' | 'role' | 'active'>>;

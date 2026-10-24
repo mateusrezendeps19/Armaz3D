@@ -1,6 +1,7 @@
 import { Flame, LayoutGrid } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
 import { useStockStats } from '../../hooks/useStockStats';
+import { useActiveTab } from '../../hooks/useAuth';
 import type { ViewMode } from '../../types/stock';
 import { TABS } from './Sidebar';
 
@@ -11,7 +12,7 @@ const VIEW_OPTIONS: Array<{ mode: ViewMode; label: string; icon: typeof Flame }>
 
 /** Título da aba ativa, resumo de ocupação e alternância status/heatmap da cena 3D. */
 export function TopBar() {
-  const activeTab = useStockStore((s) => s.activeTab);
+  const activeTab = useActiveTab();
   const viewMode = useStockStore((s) => s.viewMode);
   const setViewMode = useStockStore((s) => s.setViewMode);
   const { occupiedSlots, totalSlots, occupancyPct } = useStockStats();

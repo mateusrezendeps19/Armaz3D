@@ -1,4 +1,4 @@
-import type { NewItemInput, Rack, StockItem } from '../types/stock';
+import type { NewItemInput, Rack, StockItem, User } from '../types/stock';
 
 const AISLES = ['A', 'B', 'C'] as const;
 const ROW_Z = [-6, -1.5, 3];
@@ -75,4 +75,25 @@ const DEMO_PRODUCTS: Array<Omit<NewItemInput, 'quantity' | 'location'>> = [
 export function randomDemoProduct(): NewItemInput {
   const base = DEMO_PRODUCTS[Math.floor(Math.random() * DEMO_PRODUCTS.length)];
   return { ...base, quantity: Math.round(base.capacity * (0.1 + Math.random() * 0.9)) };
+}
+
+/**
+ * Administrador inicial (login `admin`, senha `admin`). A troca de senha é exigida no
+ * primeiro acesso. Hash PBKDF2-SHA256 pré-calculado, ver `hashPassword` em lib/auth.
+ */
+export function createSeedUsers(): User[] {
+  return [
+    {
+      id: 'user-admin',
+      name: 'Administrador',
+      username: 'admin',
+      role: 'admin',
+      active: true,
+      salt: '64a2baa14814d706dafab95fc1fad65b',
+      passwordHash: '02e3c4ce807c06423e18f00328941e7cac37c303afb66ba7e98822b7bfab68bc',
+      mustChangePassword: true,
+      createdAt: Date.now(),
+      lastLoginAt: null,
+    },
+  ];
 }
