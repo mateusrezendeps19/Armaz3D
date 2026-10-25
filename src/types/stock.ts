@@ -15,16 +15,43 @@ export interface SlotAddress {
   slot: number;
 }
 
+/** Lado do corredor central em que a estante fica. */
+export type RackSide = 'left' | 'right';
+
+/** Rua (fileira de estantes). A ordem no array define a posição no galpão (primeira = fundo). */
+export interface Aisle {
+  id: string;
+  /** Código curto usado nos endereços — ex.: "A" em "A-02-3-1". */
+  code: string;
+  /** Nome descritivo opcional — ex.: "Ferragens". */
+  name: string;
+  /** Cor de identificação na cena (montantes e faixa no piso). */
+  color: string;
+  /** Rua bloqueada não recebe entradas; saídas continuam permitidas. */
+  blocked: boolean;
+  /** Níveis e posições usados ao criar novas estantes nesta rua. */
+  defaultLevels: number;
+  defaultSlots: number;
+}
+
 export interface Rack {
   id: string;
-  /** Rua (corredor) — ex.: "A". */
+  aisleId: string;
+  /** Código da rua. Derivado de `Aisle.code` por `buildLayout`. */
   aisle: string;
-  /** Número da estante dentro da rua — ex.: 2 → "Estante 02". */
+  /** Número da estante dentro da rua — ex.: 2 → "Estante 02". Estável: não é renumerado ao remover outras. */
   number: number;
-  /** Posição do centro da estante no piso [x, z]. */
+  side: RackSide;
+  /** Centro da estante no piso [x, z]. Derivado por `buildLayout`. */
   position: [number, number];
   levels: number;
   slotsPerLevel: number;
+}
+
+/** Estrutura física do galpão (o que a aba Armazém edita). */
+export interface WarehouseLayout {
+  aisles: Aisle[];
+  racks: Rack[];
 }
 
 export interface StockItem {
@@ -82,13 +109,16 @@ export interface Movement {
   userName: string;
 }
 
-export type AppTab = 'dashboard' | 'inbound' | 'outbound' | 'audit' | 'users';
+export type AppTab = 'dashboard' | 'inbound' | 'outbound' | 'audit' | 'users' | 'layout';
 
 /** admin = acesso total · operator = movimenta estoque · viewer = somente consulta. */
 export type UserRole = 'admin' | 'operator' | 'viewer';
 
-/** stock:write = entradas/saídas · users:manage = gestão de usuários · audit:all = registros de todos · system:reset = restaurar demo. */
-export type Permission = 'stock:write' | 'users:manage' | 'audit:all' | 'system:reset';
+/**
+ * stock:write = entradas/saídas · users:manage = gestão de usuários · audit:all = registros de todos ·
+ * layout:manage = estrutura do galpão · system:reset = restaurar demo.
+ */
+export type Permission = 'stock:write' | 'users:manage' | 'audit:all' | 'layout:manage' | 'system:reset';
 
 export interface User {
   id: string;

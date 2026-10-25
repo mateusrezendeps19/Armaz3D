@@ -9,6 +9,7 @@ import { TopBar } from './TopBar';
 import { AuditTab } from './tabs/AuditTab';
 import { DashboardTab } from './tabs/DashboardTab';
 import { InboundTab } from './tabs/InboundTab';
+import { LayoutTab } from './tabs/LayoutTab';
 import { OutboundTab } from './tabs/OutboundTab';
 import { UsersTab } from './tabs/UsersTab';
 
@@ -18,10 +19,11 @@ const TAB_CONTENT: Record<AppTab, ComponentType> = {
   outbound: OutboundTab,
   audit: AuditTab,
   users: UsersTab,
+  layout: LayoutTab,
 };
 
 /** Abas com tabelas, que ocupam uma coluna mais larga. */
-const WIDE_TABS: ReadonlySet<AppTab> = new Set(['audit', 'users']);
+const WIDE_TABS: ReadonlySet<AppTab> = new Set(['audit', 'users', 'layout']);
 
 /**
  * Overlay 2D sobre o Canvas. A raiz ignora o ponteiro (a cena 3D continua recebendo

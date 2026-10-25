@@ -1,18 +1,37 @@
-import type { NewItemInput, Rack, StockItem, User } from '../types/stock';
+import { AISLE_COLORS, buildLayout } from '../lib/warehouseLayout';
+import type { Aisle, NewItemInput, Rack, StockItem, User } from '../types/stock';
 
-const AISLES = ['A', 'B', 'C'] as const;
-const ROW_Z = [-6, -1.5, 3];
-const RACK_X = [-3.6, 3.6];
+const AISLES: Array<[code: string, name: string]> = [
+  ['A', 'Fixação e mecânica'],
+  ['B', 'Consumíveis'],
+  ['C', 'Elétrica'],
+];
 
-export const SEED_RACKS: Rack[] = AISLES.flatMap((aisle, row) =>
-  RACK_X.map((x, i) => ({
-    id: `${aisle}-${String(i + 1).padStart(2, '0')}`,
-    aisle,
-    number: i + 1,
-    position: [x, ROW_Z[row]] as [number, number],
-    levels: 4,
-    slotsPerLevel: 4,
-  })),
+export const SEED_AISLES: Aisle[] = AISLES.map(([code, name], i) => ({
+  id: `aisle-${code}`,
+  code,
+  name,
+  color: AISLE_COLORS[i],
+  blocked: false,
+  defaultLevels: 4,
+  defaultSlots: 4,
+}));
+
+// Ids das estantes ("A-01"…) são internos e estáveis; o endereço exibido vem do código da rua.
+export const SEED_RACKS: Rack[] = buildLayout(
+  SEED_AISLES,
+  SEED_AISLES.flatMap((aisle) =>
+    (['left', 'right'] as const).map((side, i) => ({
+      id: `${aisle.code}-${String(i + 1).padStart(2, '0')}`,
+      aisleId: aisle.id,
+      aisle: aisle.code,
+      number: i + 1,
+      side,
+      position: [0, 0] as [number, number],
+      levels: aisle.defaultLevels,
+      slotsPerLevel: aisle.defaultSlots,
+    })),
+  ),
 );
 
 type SeedRow = [

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { MousePointerClick, PackagePlus, Shuffle } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
 import { randomDemoProduct } from '../../data/seed';
-import { addressCode } from '../../lib/warehouseLayout';
+import { addressCode, rackLabel } from '../../lib/warehouseLayout';
 import { Panel, inputClass, labelClass } from './Panel';
 
 const CATEGORIES = ['Geral', 'Fixação', 'Mecânica', 'Elétrica', 'EPI', 'Embalagem', 'Lubrificantes', 'Químicos'];
@@ -22,6 +22,7 @@ const EMPTY_FORM: FormState = { sku: '', name: '', category: 'Geral', quantity: 
 /** Formulário de entrada de mercadoria — dispara a animação doca → prateleira. */
 export function AddItemForm() {
   const racks = useStockStore((s) => s.racks);
+  const aisles = useStockStore((s) => s.aisles);
   const targetSlot = useStockStore((s) => s.targetSlot);
   const placementMode = useStockStore((s) => s.placementMode);
   const addItem = useStockStore((s) => s.addItem);
@@ -130,11 +131,15 @@ export function AddItemForm() {
               onChange={(e) => setTargetSlot(e.target.value ? { rackId: e.target.value, level: 0, slot: 0 } : null)}
             >
               <option value="">Automático</option>
-              {racks.map((r) => (
-                <option key={r.id} value={r.id}>
-                  Rua {r.aisle} · E{String(r.number).padStart(2, '0')}
-                </option>
-              ))}
+              {racks.map((r) => {
+                const blocked = !!aisles.find((a) => a.id === r.aisleId)?.blocked;
+                return (
+                  <option key={r.id} value={r.id} disabled={blocked}>
+                    {rackLabel(r)}
+                    {blocked && ' (bloqueada)'}
+                  </option>
+                );
+              })}
             </select>
             <select
               className={inputClass}

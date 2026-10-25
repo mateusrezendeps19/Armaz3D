@@ -13,18 +13,19 @@ import {
   shelfY,
   slotWorldPosition,
 } from '../../lib/warehouseLayout';
-import type { Rack, SlotAddress } from '../../types/stock';
+import type { Aisle, Rack, SlotAddress } from '../../types/stock';
 
-const UPRIGHT_COLOR = '#1d4ed8';
 const BEAM_COLOR = '#f97316';
 const DECK_COLOR = '#64748b';
 
 interface Rack3DProps {
   rack: Rack;
+  /** Fornece a cor dos montantes e o bloqueio para entradas. */
+  aisle: Aisle;
 }
 
 /** Estante porta-paletes: montantes, longarinas, decks e nichos endereçáveis. */
-export function Rack3D({ rack }: Rack3DProps) {
+export function Rack3D({ rack, aisle }: Rack3DProps) {
   const width = rackWidth(rack) + 0.1;
   const height = rackHeight(rack) + 0.2;
   const halfW = width / 2;
@@ -47,7 +48,7 @@ export function Rack3D({ rack }: Rack3DProps) {
         {posts.map(([x, z]) => (
           <mesh key={`${x}:${z}`} position={[x, height / 2, z]} castShadow receiveShadow>
             <boxGeometry args={[0.08, height, 0.08]} />
-            <meshStandardMaterial color={UPRIGHT_COLOR} metalness={0.6} roughness={0.35} />
+            <meshStandardMaterial color={aisle.color} metalness={0.6} roughness={0.35} />
           </mesh>
         ))}
 
@@ -84,13 +85,13 @@ export function Rack3D({ rack }: Rack3DProps) {
         </Html>
       </group>
 
-      <SlotMarkers rack={rack} />
+      <SlotMarkers rack={rack} blocked={aisle.blocked} />
     </group>
   );
 }
 
 /** Destaque do nicho alvo e, no modo de posicionamento, nichos vazios clicáveis. */
-function SlotMarkers({ rack }: { rack: Rack }) {
+function SlotMarkers({ rack, blocked }: { rack: Rack; blocked: boolean }) {
   const items = useStockStore((s) => s.items);
   const targetSlot = useStockStore((s) => s.targetSlot);
   const placementMode = useStockStore((s) => s.placementMode);
@@ -109,7 +110,10 @@ function SlotMarkers({ rack }: { rack: Rack }) {
     return slots;
   }, [items, rack]);
 
-  const visible = emptySlots.filter((addr) => placementMode || (targetSlot && sameSlot(targetSlot, addr)));
+  // Rua bloqueada não oferece nichos para entrada.
+  const visible = emptySlots.filter(
+    (addr) => (placementMode && !blocked) || (targetSlot && sameSlot(targetSlot, addr)),
+  );
 
   return (
     <>

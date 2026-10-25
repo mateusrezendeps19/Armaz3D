@@ -7,6 +7,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Map as MapIcon,
   RotateCcw,
   ScrollText,
   UserCog,
@@ -26,6 +27,7 @@ export const TABS: Array<{ id: AppTab; label: string; description: string; icon:
   { id: 'outbound', label: 'Saídas', description: 'Baixas e retirada de paletes', icon: ArrowUpFromLine },
   { id: 'audit', label: 'Registros', description: 'Movimentações por usuário e exportação', icon: ScrollText },
   { id: 'users', label: 'Usuários', description: 'Contas, perfis e acessos', icon: UserCog },
+  { id: 'layout', label: 'Armazém', description: 'Ruas, estantes e níveis', icon: MapIcon },
 ];
 
 /** Navegação principal, recolhível (Ctrl+B). Recolhida, mostra só os ícones. */

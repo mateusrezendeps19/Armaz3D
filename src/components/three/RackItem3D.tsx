@@ -46,7 +46,13 @@ export function RackItem3D({ item, rack }: RackItem3DProps) {
   const finalizeRemoval = useStockStore((s) => s.finalizeRemoval);
 
   const { level, slot } = item.location;
-  const target = useMemo(() => slotWorldPosition(rack, level, slot), [rack, level, slot]);
+  // Dependências primitivas: o rascunho do layout recria os objetos de estante a cada edição.
+  const [rx, rz] = rack.position;
+  const { slotsPerLevel } = rack;
+  const target = useMemo(
+    () => slotWorldPosition({ position: [rx, rz], slotsPerLevel }, level, slot),
+    [rx, rz, slotsPerLevel, level, slot],
+  );
 
   const occupancy = getOccupancy(item);
   const colorHex = viewMode === 'heatmap' ? heatmapColor(occupancy) : STATUS_META[getStatus(item)].color;

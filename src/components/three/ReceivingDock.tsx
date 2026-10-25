@@ -3,12 +3,11 @@ import { RECEIVING_DOCK, TRANSIT_LANE_X } from '../../lib/warehouseLayout';
 
 const DOCK_W = 4;
 const DOCK_D = 3;
-const LANE_START_Z = -8;
 
 /** Doca de recebimento (spawn das caixas) e faixa do corredor central de transporte. */
-export function ReceivingDock() {
+export function ReceivingDock({ laneStartZ }: { laneStartZ: number }) {
   const [dx, , dz] = RECEIVING_DOCK;
-  const laneLength = dz - DOCK_D / 2 - LANE_START_Z;
+  const laneLength = dz - DOCK_D / 2 - laneStartZ;
 
   const borders: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [
     { pos: [0, 0.01, -DOCK_D / 2], size: [DOCK_W, 0.02, 0.1] },
@@ -39,7 +38,7 @@ export function ReceivingDock() {
 
       <mesh
         rotation-x={-Math.PI / 2}
-        position={[TRANSIT_LANE_X, 0.003, LANE_START_Z + laneLength / 2]}
+        position={[TRANSIT_LANE_X, 0.003, laneStartZ + laneLength / 2]}
         receiveShadow
       >
         <planeGeometry args={[1.6, laneLength]} />

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { SEED_RACKS, createSeedItems, createSeedUsers } from '../data/seed';
+import { SEED_AISLES, SEED_RACKS, createSeedItems, createSeedUsers } from '../data/seed';
 import { MIN_PASSWORD_LENGTH, USERNAME_PATTERN, can, canOpenTab, hashPassword, verifyPassword } from '../lib/auth';
-import { addressCode, sameSlot } from '../lib/warehouseLayout';
+import { AISLE_COLORS, addressCode, buildLayout, sameSlot, validateLayout } from '../lib/warehouseLayout';
 import type {
+  Aisle,
   AppTab,
   ItemPatch,
   Movement,
@@ -19,9 +20,12 @@ import type {
   User,
   UserPatch,
   ViewMode,
+  WarehouseLayout,
 } from '../types/stock';
 
 interface PersistedState {
+  /** Ruas na ordem do galpão (primeira = fundo, última = junto à doca). */
+  aisles: Aisle[];
   racks: Rack[];
   items: StockItem[];
   /** Histórico de entradas/saídas, mais recente primeiro. */
@@ -42,6 +46,8 @@ export interface StockState extends PersistedState {
   targetSlot: SlotAddress | null;
   /** Quando ativo, nichos vazios ficam clicáveis na cena 3D. */
   placementMode: boolean;
+  /** Rascunho da aba Armazém (null = sem alterações). A cena mostra o rascunho como pré-visualização. */
+  layoutDraft: WarehouseLayout | null;
 
   // ----- CRUD -----
   /** Cria o item na fase 'entering' (dispara a animação de entrada). */
@@ -68,9 +74,18 @@ export interface StockState extends PersistedState {
   getCurrentUser: () => User | undefined;
   setPasswordDialogOpen: (open: boolean) => void;
 
+  // ----- Estrutura do galpão -----
+  /** Aplica uma operação de lib/layoutEditor ao rascunho (criado a partir do layout atual se não existir). */
+  editLayout: (recipe: (layout: WarehouseLayout) => WarehouseLayout) => void;
+  discardLayout: () => void;
+  /** Valida o rascunho contra o estoque atual e o torna definitivo. */
+  applyLayout: () => MutationResult;
+
   // ----- Consultas -----
   getItem: (id: string) => StockItem | undefined;
   getRack: (id: string) => Rack | undefined;
+  /** Rua bloqueada para entradas. */
+  isRackBlocked: (rackId: string) => boolean;
   isSlotFree: (addr: SlotAddress) => boolean;
   findFreeSlot: () => SlotAddress | null;
 
@@ -134,6 +149,29 @@ function validatePassword(password: string): string | null {
 
 const isActiveAdmin = (u: User) => u.active && u.role === 'admin';
 
+/** Converte o formato v1 (rua só como texto em `rack.aisle`, posições fixas) em ruas + estantes. */
+function migrateLayoutV1(racks: Array<Omit<Rack, 'aisleId' | 'side'>>): WarehouseLayout {
+  const codes = [...new Set(racks.map((r) => r.aisle))];
+  const aisles: Aisle[] = codes.map((code, i) => {
+    const first = racks.find((r) => r.aisle === code)!;
+    return {
+      id: `aisle-${code}`,
+      code,
+      name: '',
+      color: AISLE_COLORS[i % AISLE_COLORS.length],
+      blocked: false,
+      defaultLevels: first.levels,
+      defaultSlots: first.slotsPerLevel,
+    };
+  });
+  const migrated: Rack[] = racks.map((r) => ({
+    ...r,
+    aisleId: `aisle-${r.aisle}`,
+    side: r.position[0] < 0 ? 'left' : 'right',
+  }));
+  return { aisles, racks: buildLayout(aisles, migrated) };
+}
+
 export const useStockStore = create<StockState>()(
   persist(
     (set, get) => {
@@ -147,6 +185,7 @@ export const useStockStore = create<StockState>()(
       const usernameTaken = (username: string) => get().users.some((u) => u.username === username);
 
       return {
+        aisles: SEED_AISLES,
         racks: SEED_RACKS,
         items: createSeedItems(),
         movements: [],
@@ -160,6 +199,7 @@ export const useStockStore = create<StockState>()(
         hoveredId: null,
         targetSlot: null,
         placementMode: false,
+        layoutDraft: null,
 
         addItem: (input) => {
           const user = actor('stock:write');
@@ -169,7 +209,11 @@ export const useStockStore = create<StockState>()(
 
           const location = input.location ?? get().findFreeSlot();
           if (!location) return { ok: false, error: 'Não há nichos livres no galpão.' };
-          if (!get().getRack(location.rackId)) return { ok: false, error: 'Estante inexistente.' };
+          const rack = get().getRack(location.rackId);
+          if (!rack) return { ok: false, error: 'Estante inexistente.' };
+          if (get().isRackBlocked(rack.id)) return { ok: false, error: `A rua ${rack.aisle} está bloqueada para entradas.` };
+          if (location.level >= rack.levels || location.slot >= rack.slotsPerLevel)
+            return { ok: false, error: 'Nicho inexistente nesta estante.' };
           if (!get().isSlotFree(location)) return { ok: false, error: 'O nicho escolhido já está ocupado.' };
 
           const item: StockItem = {
@@ -265,6 +309,7 @@ export const useStockStore = create<StockState>()(
             targetSlot: null,
             placementMode: false,
             passwordDialogOpen: false,
+            layoutDraft: null,
           }),
 
         changeOwnPassword: async (current, next) => {
@@ -352,15 +397,48 @@ export const useStockStore = create<StockState>()(
         },
         setPasswordDialogOpen: (open) => set({ passwordDialogOpen: open }),
 
+        editLayout: (recipe) => {
+          if (!actor('layout:manage')) return;
+          const { aisles, racks, layoutDraft } = get();
+          const next = recipe(layoutDraft ?? { aisles, racks });
+          const draft = { aisles: next.aisles, racks: buildLayout(next.aisles, next.racks) };
+          // Desfazer manualmente todas as mudanças volta ao estado "sem alterações".
+          const unchanged = JSON.stringify(draft) === JSON.stringify({ aisles, racks });
+          set({ layoutDraft: unchanged ? null : draft });
+        },
+
+        discardLayout: () => set({ layoutDraft: null }),
+
+        applyLayout: () => {
+          if (!actor('layout:manage')) return DENIED;
+          const draft = get().layoutDraft;
+          if (!draft) return { ok: false, error: 'Não há alterações para aplicar.' };
+          const issues = validateLayout(draft, get().items);
+          if (issues.length) return { ok: false, error: issues[0] };
+          set((s) => {
+            const target = s.targetSlot && draft.racks.find((r) => r.id === s.targetSlot?.rackId);
+            const keepTarget =
+              !!target && !!s.targetSlot && s.targetSlot.level < target.levels && s.targetSlot.slot < target.slotsPerLevel;
+            return { aisles: draft.aisles, racks: draft.racks, layoutDraft: null, targetSlot: keepTarget ? s.targetSlot : null };
+          });
+          return { ok: true, id: 'layout' };
+        },
+
         getItem: (id) => get().items.find((i) => i.id === id),
         getRack: (id) => get().racks.find((r) => r.id === id),
+        isRackBlocked: (rackId) => {
+          const { racks, aisles } = get();
+          const rack = racks.find((r) => r.id === rackId);
+          return !!rack && !!aisles.find((a) => a.id === rack.aisleId)?.blocked;
+        },
 
         // Itens saindo já liberam o nicho: a caixa está sendo retirada.
         isSlotFree: (addr) => !get().items.some((i) => i.phase !== 'leaving' && sameSlot(i.location, addr)),
 
         findFreeSlot: () => {
-          const { racks, isSlotFree } = get();
+          const { racks, isSlotFree, isRackBlocked } = get();
           for (const rack of racks) {
+            if (isRackBlocked(rack.id)) continue;
             for (let level = 0; level < rack.levels; level++) {
               for (let slot = 0; slot < rack.slotsPerLevel; slot++) {
                 const addr = { rackId: rack.id, level, slot };
@@ -376,10 +454,10 @@ export const useStockStore = create<StockState>()(
         setTargetSlot: (addr) => set({ targetSlot: addr }),
         setPlacementMode: (on) => set({ placementMode: on }),
         setViewMode: (mode) => set({ viewMode: mode }),
-        // O modo de posicionamento só faz sentido na aba de entradas.
+        // O modo de posicionamento só faz sentido na aba de entradas; o rascunho do layout, na aba Armazém.
         setActiveTab: (tab) => {
           if (!canOpenTab(get().getCurrentUser(), tab)) return;
-          set({ activeTab: tab, placementMode: false });
+          set({ activeTab: tab, placementMode: false, layoutDraft: null });
         },
         toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
@@ -387,6 +465,7 @@ export const useStockStore = create<StockState>()(
         resetDemo: () => {
           if (!actor('system:reset')) return;
           set({
+            aisles: SEED_AISLES,
             racks: SEED_RACKS,
             items: createSeedItems(),
             movements: [],
@@ -394,15 +473,23 @@ export const useStockStore = create<StockState>()(
             hoveredId: null,
             targetSlot: null,
             placementMode: false,
+            layoutDraft: null,
           });
         },
       };
     },
     {
       name: 'estoque-3d',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<PersistedState>;
+        // v1 → v2: ruas viram entidades e as posições passam a ser calculadas pela grade.
+        if (version < 2 && p.racks?.length) return { ...p, ...migrateLayoutV1(p.racks) };
+        return p;
+      },
       partialize: (s): PersistedState => ({
+        aisles: s.aisles,
         racks: s.racks,
         items: s.items,
         movements: s.movements,
@@ -424,7 +511,9 @@ export const useStockStore = create<StockState>()(
           userName: m.userName ?? 'Não identificado',
         }));
         const users = p.users?.length ? p.users : current.users;
-        return { ...current, ...p, items, movements, users };
+        // Ruas e estantes só valem juntas; sem ruas persistidas, fica o galpão de demonstração.
+        const layout = p.aisles?.length && p.racks ? { aisles: p.aisles, racks: p.racks } : { aisles: current.aisles, racks: current.racks };
+        return { ...current, ...p, ...layout, items, movements, users };
       },
     },
   ),
