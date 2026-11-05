@@ -7,6 +7,7 @@ import { Legend } from './Legend';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { AuditTab } from './tabs/AuditTab';
+import { BackupTab } from './tabs/BackupTab';
 import { DashboardTab } from './tabs/DashboardTab';
 import { InboundTab } from './tabs/InboundTab';
 import { LayoutTab } from './tabs/LayoutTab';
@@ -20,6 +21,7 @@ const TAB_CONTENT: Record<AppTab, ComponentType> = {
   audit: AuditTab,
   users: UsersTab,
   layout: LayoutTab,
+  backup: BackupTab,
 };
 
 /** Abas com tabelas, que ocupam uma coluna mais larga. */

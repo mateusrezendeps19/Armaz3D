@@ -115,16 +115,16 @@ export interface Movement {
   userName: string;
 }
 
-export type AppTab = 'dashboard' | 'inbound' | 'outbound' | 'audit' | 'users' | 'layout';
+export type AppTab = 'dashboard' | 'inbound' | 'outbound' | 'audit' | 'users' | 'layout' | 'backup';
 
 /** admin = acesso total · operator = movimenta estoque · viewer = somente consulta. */
 export type UserRole = 'admin' | 'operator' | 'viewer';
 
 /**
  * stock:write = entradas/saídas · users:manage = gestão de usuários · audit:all = registros de todos ·
- * layout:manage = estrutura do galpão · system:reset = restaurar demo.
+ * layout:manage = estrutura do galpão · system:backup = backup e restauração · system:reset = restaurar demo.
  */
-export type Permission = 'stock:write' | 'users:manage' | 'audit:all' | 'layout:manage' | 'system:reset';
+export type Permission = 'stock:write' | 'users:manage' | 'audit:all' | 'layout:manage' | 'system:backup' | 'system:reset';
 
 export interface User {
   id: string;

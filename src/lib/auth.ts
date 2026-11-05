@@ -11,7 +11,7 @@ export const ROLE_META: Record<UserRole, { label: string; description: string; c
     label: 'Administrador',
     description: 'Acesso total, inclusive gestão de usuários',
     color: '#22d3ee',
-    permissions: ['stock:write', 'users:manage', 'audit:all', 'layout:manage', 'system:reset'],
+    permissions: ['stock:write', 'users:manage', 'audit:all', 'layout:manage', 'system:backup', 'system:reset'],
   },
   operator: {
     label: 'Operador',
@@ -33,6 +33,7 @@ export const TAB_PERMISSIONS: Partial<Record<AppTab, Permission>> = {
   outbound: 'stock:write',
   users: 'users:manage',
   layout: 'layout:manage',
+  backup: 'system:backup',
 };
 
 export function can(user: Pick<User, 'role' | 'active'> | null | undefined, permission: Permission): boolean {

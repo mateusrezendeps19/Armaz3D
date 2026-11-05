@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { SEED_AISLES, SEED_RACKS, createSeedItems, createSeedUsers } from '../data/seed';
+import { DATA_VERSION, createBackup } from '../lib/backup';
+import type { BackupData, BackupFile } from '../lib/backup';
 import { MIN_PASSWORD_LENGTH, USERNAME_PATTERN, can, canOpenTab, hashPassword, verifyPassword } from '../lib/auth';
 import { AISLE_COLORS, addressCode, buildLayout, sameSlot, validateLayout } from '../lib/warehouseLayout';
 import type {
@@ -34,6 +36,8 @@ interface PersistedState {
   viewMode: ViewMode;
   activeTab: AppTab;
   sidebarCollapsed: boolean;
+  /** Quando o último arquivo de backup foi gerado (null = nunca). */
+  lastBackupAt: number | null;
 }
 
 export interface StockState extends PersistedState {
@@ -88,6 +92,15 @@ export interface StockState extends PersistedState {
   discardLayout: () => void;
   /** Valida o rascunho contra o estoque atual e o torna definitivo. */
   applyLayout: () => MutationResult;
+
+  // ----- Backup -----
+  /** Monta o arquivo de backup com o estado atual e registra a data do backup. */
+  exportBackup: () => BackupFile | null;
+  /**
+   * Substitui ruas, estantes, itens e histórico pelos do backup (já validado por parseBackup).
+   * Com `keepUsers`, os usuários atuais são mantidos; senão, a sessão é encerrada se o usuário logado não existir mais.
+   */
+  restoreBackup: (data: BackupData, options: { keepUsers: boolean }) => MutationResult;
 
   // ----- Consultas -----
   getItem: (id: string) => StockItem | undefined;
@@ -217,6 +230,7 @@ export const useStockStore = create<StockState>()(
         viewMode: 'status',
         activeTab: 'dashboard',
         sidebarCollapsed: false,
+        lastBackupAt: null,
         currentUserId: null,
         passwordDialogOpen: false,
         selectedId: null,
@@ -475,6 +489,39 @@ export const useStockStore = create<StockState>()(
           return { ok: true, id: 'layout' };
         },
 
+        exportBackup: () => {
+          const user = actor('system:backup');
+          if (!user) return null;
+          const { aisles, racks, items, movements, users } = get();
+          const backup = createBackup({ aisles, racks, items, movements, users }, user.name);
+          set({ lastBackupAt: Date.now() });
+          return backup;
+        },
+
+        restoreBackup: (data, { keepUsers }) => {
+          const user = actor('system:backup');
+          if (!user) return DENIED;
+          const users = keepUsers ? get().users : data.users;
+          const me = users.find((u) => u.id === user.id);
+          set({
+            aisles: data.aisles,
+            racks: data.racks,
+            items: data.items,
+            movements: data.movements.slice(0, MAX_MOVEMENTS),
+            users,
+            // Seleções e rascunhos apontam para o estado antigo.
+            selectedId: null,
+            hoveredId: null,
+            targetSlot: null,
+            placementMode: false,
+            transfer: null,
+            layoutDraft: null,
+            // Quem restaurou continua logado só se ainda existir, ativo, no conjunto restaurado.
+            ...(!me?.active && { currentUserId: null }),
+          });
+          return { ok: true, id: 'backup' };
+        },
+
         getItem: (id) => get().items.find((i) => i.id === id),
         getRack: (id) => get().racks.find((r) => r.id === id),
         isRackBlocked: (rackId) => {
@@ -537,7 +584,7 @@ export const useStockStore = create<StockState>()(
     },
     {
       name: 'estoque-3d',
-      version: 2,
+      version: DATA_VERSION,
       storage: createJSONStorage(() => localStorage),
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<PersistedState>;
@@ -554,6 +601,7 @@ export const useStockStore = create<StockState>()(
         viewMode: s.viewMode,
         activeTab: s.activeTab,
         sidebarCollapsed: s.sidebarCollapsed,
+        lastBackupAt: s.lastBackupAt,
       }),
       // Animações interrompidas pelo fechamento do app são concluídas ao reabrir.
       merge: (persisted, current) => {

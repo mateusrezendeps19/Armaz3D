@@ -4,6 +4,7 @@ import {
   ArrowUpFromLine,
   ChevronsLeft,
   ChevronsRight,
+  DatabaseBackup,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -28,6 +29,7 @@ export const TABS: Array<{ id: AppTab; label: string; description: string; icon:
   { id: 'audit', label: 'Registros', description: 'Movimentações por usuário e exportação', icon: ScrollText },
   { id: 'users', label: 'Usuários', description: 'Contas, perfis e acessos', icon: UserCog },
   { id: 'layout', label: 'Armazém', description: 'Ruas, estantes e níveis', icon: MapIcon },
+  { id: 'backup', label: 'Backup', description: 'Cópia de segurança e restauração', icon: DatabaseBackup },
 ];
 
 /** Navegação principal, recolhível (Ctrl+B). Recolhida, mostra só os ícones. */
