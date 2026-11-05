@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, Download, FileJson, FileSpreadsheet, FilterX, ScrollText, Search, Users } from 'lucide-react';
+import { ArrowDownToLine, ArrowRightLeft, ArrowUpFromLine, Download, FileJson, FileSpreadsheet, FilterX, ScrollText, Search, Users } from 'lucide-react';
 import { useStockStore } from '../../../store/useStockStore';
 import { useCurrentUser, usePermission } from '../../../hooks/useAuth';
 import {
@@ -7,6 +7,7 @@ import {
   downloadFile,
   fileStamp,
   formatDateTime,
+  movementAddress,
   movementsToCsv,
   movementsToJson,
   toCsv,
@@ -25,7 +26,11 @@ const KIND_OPTIONS: Array<{ value: KindFilter; label: string }> = [
   { value: 'all', label: 'Todos os tipos' },
   { value: 'in', label: 'Entradas' },
   { value: 'out', label: 'Saídas' },
-  ...(Object.keys(REASON_LABEL) as MovementReason[]).map((r) => ({ value: r, label: `· ${REASON_LABEL[r]}` })),
+  { value: 'transfer', label: 'Transferências' },
+  // 'transfer' já é tipo e motivo ao mesmo tempo; não repete na lista de motivos.
+  ...(Object.keys(REASON_LABEL) as MovementReason[])
+    .filter((r) => r !== 'transfer')
+    .map((r) => ({ value: r, label: `· ${REASON_LABEL[r]}` })),
 ];
 
 /** Valor especial do filtro de usuário para registros sem responsável. */
@@ -57,7 +62,7 @@ function applyFilters(movements: Movement[], f: Filters): Movement[] {
       (f.kind === 'all' || m.type === f.kind || m.reason === f.kind) &&
       m.at >= from &&
       m.at < to &&
-      (!q || [m.sku, m.name, m.address, m.userName].some((v) => v.toLowerCase().includes(q))),
+      (!q || [m.sku, m.name, m.address, m.fromAddress ?? '', m.userName].some((v) => v.toLowerCase().includes(q))),
   );
 }
 
@@ -68,6 +73,7 @@ interface UserSummary {
   inUnits: number;
   outCount: number;
   outUnits: number;
+  transferCount: number;
   lastAt: number;
 }
 
@@ -75,10 +81,12 @@ function summarize(movements: Movement[]): UserSummary[] {
   const byUser = new Map<string, UserSummary>();
   for (const m of movements) {
     const key = m.userId ?? UNIDENTIFIED;
-    const row = byUser.get(key) ?? { userId: m.userId, name: m.userName, inCount: 0, inUnits: 0, outCount: 0, outUnits: 0, lastAt: 0 };
+    const row = byUser.get(key) ?? { userId: m.userId, name: m.userName, inCount: 0, inUnits: 0, outCount: 0, outUnits: 0, transferCount: 0, lastAt: 0 };
     if (m.type === 'in') {
       row.inCount++;
       row.inUnits += m.quantity;
+    } else if (m.type === 'transfer') {
+      row.transferCount++;
     } else {
       row.outCount++;
       row.outUnits += m.quantity;
@@ -90,7 +98,8 @@ function summarize(movements: Movement[]): UserSummary[] {
     }
     byUser.set(key, row);
   }
-  return [...byUser.values()].sort((a, b) => b.inCount + b.outCount - (a.inCount + a.outCount));
+  const total = (r: UserSummary) => r.inCount + r.outCount + r.transferCount;
+  return [...byUser.values()].sort((a, b) => total(b) - total(a));
 }
 
 export function AuditTab() {
@@ -120,8 +129,8 @@ export function AuditTab() {
   const exportSummary = () =>
     downloadFile(
       toCsv(
-        ['Usuário', 'Entradas', 'Unidades recebidas', 'Saídas', 'Unidades expedidas', 'Última movimentação'],
-        summary.map((r) => [r.name, r.inCount, r.inUnits, r.outCount, r.outUnits, formatDateTime(r.lastAt)]),
+        ['Usuário', 'Entradas', 'Unidades recebidas', 'Saídas', 'Unidades expedidas', 'Transferências', 'Última movimentação'],
+        summary.map((r) => [r.name, r.inCount, r.inUnits, r.outCount, r.outUnits, r.transferCount, formatDateTime(r.lastAt)]),
       ),
       `resumo_usuarios_${fileStamp()}.csv`,
       'text/csv',
@@ -147,6 +156,7 @@ export function AuditTab() {
                   <th className="pb-1 font-medium">Usuário</th>
                   <th className="pb-1 text-right font-medium">Entradas</th>
                   <th className="pb-1 text-right font-medium">Saídas</th>
+                  <th className="pb-1 text-right font-medium">Transf.</th>
                   <th className="pb-1 text-right font-medium">Última</th>
                 </tr>
               </thead>
@@ -174,6 +184,7 @@ export function AuditTab() {
                       <td className="text-right tabular-nums text-orange-400">
                         {r.outCount} <span className="text-slate-500">({numberFormat.format(r.outUnits)} un.)</span>
                       </td>
+                      <td className="text-right tabular-nums text-cyan-400">{r.transferCount}</td>
                       <td className="rounded-r-md pr-1 text-right text-[10px] tabular-nums text-slate-400">
                         {formatDateTime(r.lastAt)}
                       </td>
@@ -281,30 +292,32 @@ export function AuditTab() {
   );
 }
 
+const TYPE_STYLE: Record<MovementType, { icon: typeof ArrowDownToLine; badge: string; text: string; sign: string }> = {
+  in: { icon: ArrowDownToLine, badge: 'bg-emerald-500/10 text-emerald-400', text: 'text-emerald-400', sign: '+' },
+  out: { icon: ArrowUpFromLine, badge: 'bg-orange-500/10 text-orange-400', text: 'text-orange-400', sign: '−' },
+  transfer: { icon: ArrowRightLeft, badge: 'bg-cyan-500/10 text-cyan-400', text: 'text-cyan-400', sign: '' },
+};
+
 function MovementRow({ movement: m }: { movement: Movement }) {
-  const isIn = m.type === 'in';
-  const Icon = isIn ? ArrowDownToLine : ArrowUpFromLine;
+  const style = TYPE_STYLE[m.type];
+  const Icon = style.icon;
   return (
     <li className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-slate-800/60">
-      <span
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${
-          isIn ? 'bg-emerald-500/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400'
-        }`}
-      >
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${style.badge}`}>
         <Icon size={14} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-medium text-slate-100">{m.name}</span>
         <span className="block truncate text-[11px] text-slate-400">
-          {REASON_LABEL[m.reason]} · {m.sku} · {m.address}
+          {REASON_LABEL[m.reason]} · {m.sku} · {movementAddress(m)}
         </span>
       </span>
       <span className="w-28 shrink-0 truncate text-[11px] text-slate-300" title={m.userName}>
         {m.userName}
       </span>
       <span className="w-24 shrink-0 text-right">
-        <span className={`block text-xs font-semibold tabular-nums ${isIn ? 'text-emerald-400' : 'text-orange-400'}`}>
-          {isIn ? '+' : '−'}
+        <span className={`block text-xs font-semibold tabular-nums ${style.text}`}>
+          {style.sign}
           {m.quantity}
         </span>
         <span className="block text-[10px] tabular-nums text-slate-500">{formatDateTime(m.at)}</span>

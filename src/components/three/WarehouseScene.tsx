@@ -136,10 +136,14 @@ function StockItems() {
 
 type OrbitLike = { target: Vector3; update: () => void };
 
-/** Ao selecionar uma caixa, desliza o alvo da câmera orbital até ela. */
+/** Ao selecionar uma caixa (ou transferi-la de nicho), desliza o alvo da câmera orbital até ela. */
 function CameraFocus() {
   const controls = useThree((s) => s.controls) as unknown as OrbitLike | null;
   const selectedId = useStockStore((s) => s.selectedId);
+  const location = useStockStore((s) => {
+    const loc = s.items.find((i) => i.id === s.selectedId)?.location;
+    return loc ? `${loc.rackId}:${loc.level}:${loc.slot}` : null;
+  });
 
   useEffect(() => {
     if (!controls || !selectedId) return;
@@ -160,7 +164,7 @@ function CameraFocus() {
     return () => {
       tween.kill();
     };
-  }, [controls, selectedId]);
+  }, [controls, selectedId, location]);
 
   return null;
 }

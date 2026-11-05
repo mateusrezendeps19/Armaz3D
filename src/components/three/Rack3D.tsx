@@ -90,12 +90,17 @@ export function Rack3D({ rack, aisle }: Rack3DProps) {
   );
 }
 
-/** Destaque do nicho alvo e, no modo de posicionamento, nichos vazios clicáveis. */
+/**
+ * Destaque do nicho alvo e, no modo de posicionamento, nichos vazios clicáveis.
+ * Com uma transferência em preparo, o clique define o destino dela em vez do alvo da entrada.
+ */
 function SlotMarkers({ rack, blocked }: { rack: Rack; blocked: boolean }) {
   const items = useStockStore((s) => s.items);
-  const targetSlot = useStockStore((s) => s.targetSlot);
+  const transferActive = useStockStore((s) => s.transfer !== null);
+  const targetSlot = useStockStore((s) => (s.transfer ? s.transfer.target : s.targetSlot));
   const placementMode = useStockStore((s) => s.placementMode);
   const setTargetSlot = useStockStore((s) => s.setTargetSlot);
+  const setTransferTarget = useStockStore((s) => s.setTransferTarget);
   const setPlacementMode = useStockStore((s) => s.setPlacementMode);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
@@ -136,7 +141,7 @@ function SlotMarkers({ rack, blocked }: { rack: Rack; blocked: boolean }) {
         const onClick = (e: ThreeEvent<MouseEvent>) => {
           if (!placementMode) return;
           e.stopPropagation();
-          setTargetSlot(addr);
+          (transferActive ? setTransferTarget : setTargetSlot)(addr);
           setPlacementMode(false);
           document.body.style.cursor = 'auto';
         };

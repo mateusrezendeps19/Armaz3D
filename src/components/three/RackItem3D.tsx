@@ -14,6 +14,7 @@ import {
   getOccupancy,
   getStatus,
   heatmapColor,
+  sameSlot,
   slotWorldPosition,
 } from '../../lib/warehouseLayout';
 import type { Rack, StockItem } from '../../types/stock';
@@ -26,16 +27,21 @@ interface RackItem3DProps {
 const [BOX_W, BOX_H, BOX_D] = BOX_SIZE;
 const FILL_BAR_W = BOX_W * 0.8;
 const TINY = 0.001;
+/** Altura de transporte (caixa rente ao piso), a mesma da doca. */
+const CARRY_Y = RECEIVING_DOCK[1];
 
 /**
  * Caixa/palete de um nicho. Cor por status ou heatmap, brilho + contorno no hover/seleção,
- * e animações GSAP de entrada (doca → corredor → nível) e saída (eleva e encolhe).
+ * e animações GSAP de entrada (doca → corredor → nível), saída (eleva e encolhe) e
+ * transferência (nicho → corredor central → outro nicho).
  */
 export function RackItem3D({ item, rack }: RackItem3DProps) {
   const groupRef = useRef<Group>(null);
   const materialRef = useRef<MeshStandardMaterial>(null);
   const fillRef = useRef<Mesh>(null);
   const hasPlacedRef = useRef(false);
+  /** Último endereço animado: distingue transferência (endereço mudou) de layout alterado (estante mudou de lugar). */
+  const lastLocationRef = useRef(item.location);
 
   const viewMode = useStockStore((s) => s.viewMode);
   const isHovered = useStockStore((s) => s.hoveredId === item.id);
@@ -137,11 +143,35 @@ export function RackItem3D({ item, rack }: RackItem3DProps) {
     }
 
     // idle: na primeira montagem posiciona direto; depois anima se o endereço mudar
+    const transferred = !sameSlot(lastLocationRef.current, item.location);
+    lastLocationRef.current = item.location;
     if (!hasPlacedRef.current) {
       group.position.set(tx, ty, tz);
       group.scale.setScalar(1);
       hasPlacedRef.current = true;
       return;
+    }
+    if (transferred) {
+      const { x: cx, z: cz } = group.position;
+      const tl = gsap.timeline();
+      // puxa o palete para o corredor da rua atual
+      tl.to(group.position, { z: cz + AISLE_CLEARANCE, duration: 0.45, ease: 'power1.inOut' });
+      if (Math.abs(cz - tz) < 0.01) {
+        // mesma rua: desliza pelo corredor dela já ajustando a altura
+        tl.to(group.position, { x: tx, y: ty, duration: 0.9, ease: 'power2.inOut' });
+      } else {
+        // outra rua: desce, vai ao corredor central, percorre até a rua de destino e segue até o nicho
+        tl.to(group.position, { y: CARRY_Y, duration: 0.5, ease: 'power2.in' })
+          .to(group.position, { x: TRANSIT_LANE_X, duration: Math.abs(cx - TRANSIT_LANE_X) > 0.01 ? 0.6 : 0, ease: 'power2.inOut' })
+          .to(group.position, { z: tz + AISLE_CLEARANCE, duration: 1, ease: 'power2.inOut' })
+          .to(group.position, { x: tx, duration: 0.7, ease: 'power2.inOut' })
+          .to(group.position, { y: ty, duration: 0.55, ease: 'power2.out' });
+      }
+      // encaixa na prateleira
+      tl.to(group.position, { z: tz, duration: 0.45, ease: 'power1.out' });
+      return () => {
+        tl.kill();
+      };
     }
     if (group.position.distanceTo(new Vector3(tx, ty, tz)) > 0.01) {
       const tween = gsap.to(group.position, { x: tx, y: ty, z: tz, duration: 0.8, ease: 'power2.inOut' });

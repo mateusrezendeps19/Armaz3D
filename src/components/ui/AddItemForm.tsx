@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { MousePointerClick, PackagePlus, Shuffle } from 'lucide-react';
+import { PackagePlus, Shuffle } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
 import { randomDemoProduct } from '../../data/seed';
-import { addressCode, rackLabel } from '../../lib/warehouseLayout';
 import { Panel, inputClass, labelClass } from './Panel';
+import { SlotPicker } from './SlotPicker';
 
 const CATEGORIES = ['Geral', 'Fixação', 'Mecânica', 'Elétrica', 'EPI', 'Embalagem', 'Lubrificantes', 'Químicos'];
 
@@ -21,21 +21,14 @@ const EMPTY_FORM: FormState = { sku: '', name: '', category: 'Geral', quantity: 
 
 /** Formulário de entrada de mercadoria — dispara a animação doca → prateleira. */
 export function AddItemForm() {
-  const racks = useStockStore((s) => s.racks);
-  const aisles = useStockStore((s) => s.aisles);
   const targetSlot = useStockStore((s) => s.targetSlot);
   const placementMode = useStockStore((s) => s.placementMode);
   const addItem = useStockStore((s) => s.addItem);
   const setTargetSlot = useStockStore((s) => s.setTargetSlot);
   const setPlacementMode = useStockStore((s) => s.setPlacementMode);
-  const isSlotFree = useStockStore((s) => s.isSlotFree);
-  useStockStore((s) => s.items); // reavalia a ocupação do nicho alvo quando o estoque muda
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
-
-  const targetRack = targetSlot ? racks.find((r) => r.id === targetSlot.rackId) : undefined;
-  const targetOccupied = !!targetSlot && !isSlotFree(targetSlot);
 
   const field = (key: keyof FormState) => ({
     value: form[key],
@@ -66,9 +59,6 @@ export function AddItemForm() {
     const result = addItem(randomDemoProduct());
     setFeedback(result.ok ? { type: 'ok', text: 'Entrada rápida registrada.' } : { type: 'error', text: result.error });
   };
-
-  const setSlotPart = (part: 'level' | 'slot', value: number) =>
-    targetSlot && setTargetSlot({ ...targetSlot, [part]: value });
 
   return (
     <Panel
@@ -124,66 +114,14 @@ export function AddItemForm() {
 
         <div>
           <label className={labelClass}>Endereço de destino</label>
-          <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-2">
-            <select
-              className={inputClass}
-              value={targetSlot?.rackId ?? ''}
-              onChange={(e) => setTargetSlot(e.target.value ? { rackId: e.target.value, level: 0, slot: 0 } : null)}
-            >
-              <option value="">Automático</option>
-              {racks.map((r) => {
-                const blocked = !!aisles.find((a) => a.id === r.aisleId)?.blocked;
-                return (
-                  <option key={r.id} value={r.id} disabled={blocked}>
-                    {rackLabel(r)}
-                    {blocked && ' (bloqueada)'}
-                  </option>
-                );
-              })}
-            </select>
-            <select
-              className={inputClass}
-              disabled={!targetRack}
-              value={targetSlot?.level ?? 0}
-              onChange={(e) => setSlotPart('level', Number(e.target.value))}
-            >
-              {Array.from({ length: targetRack?.levels ?? 1 }, (_, i) => (
-                <option key={i} value={i}>
-                  Nível {i + 1}
-                </option>
-              ))}
-            </select>
-            <select
-              className={inputClass}
-              disabled={!targetRack}
-              value={targetSlot?.slot ?? 0}
-              onChange={(e) => setSlotPart('slot', Number(e.target.value))}
-            >
-              {Array.from({ length: targetRack?.slotsPerLevel ?? 1 }, (_, i) => (
-                <option key={i} value={i}>
-                  Pos. {i + 1}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-            <span className={targetOccupied ? 'text-red-400' : 'text-slate-400'}>
-              {targetSlot && targetRack
-                ? `${addressCode(targetRack, targetSlot)}${targetOccupied ? ' — ocupado' : ' — livre'}`
-                : 'Primeiro nicho livre será usado'}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPlacementMode(!placementMode)}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 transition ${
-                placementMode ? 'bg-cyan-500 text-slate-950' : 'text-cyan-400 hover:bg-slate-800'
-              }`}
-            >
-              <MousePointerClick size={12} />
-              {placementMode ? 'Clique num nicho vazio…' : 'Escolher no 3D'}
-            </button>
-          </div>
+          <SlotPicker
+            value={targetSlot}
+            onChange={setTargetSlot}
+            emptyLabel="Automático"
+            emptyHint="Primeiro nicho livre será usado"
+            placementMode={placementMode}
+            onTogglePlacement={() => setPlacementMode(!placementMode)}
+          />
         </div>
 
         <button

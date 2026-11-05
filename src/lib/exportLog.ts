@@ -1,13 +1,20 @@
-import type { Movement, MovementReason } from '../types/stock';
+import type { Movement, MovementReason, MovementType } from '../types/stock';
 
 export const REASON_LABEL: Record<MovementReason, string> = {
   receipt: 'Recebimento',
   restock: 'Reposição',
   withdrawal: 'Baixa parcial',
   removal: 'Retirada do palete',
+  transfer: 'Transferência',
 };
 
-export const TYPE_LABEL = { in: 'Entrada', out: 'Saída' } as const;
+export const TYPE_LABEL: Record<MovementType, string> = { in: 'Entrada', out: 'Saída', transfer: 'Transferência' };
+
+/** Quantidade com sinal: entradas somam, saídas subtraem, transferências não alteram o saldo. */
+export const signedQuantity = (m: Movement) => (m.type === 'in' ? m.quantity : m.type === 'out' ? -m.quantity : 0);
+
+/** Endereço para exibição: "A-01-1-1 → B-02-3-1" nas transferências. */
+export const movementAddress = (m: Movement) => (m.fromAddress ? `${m.fromAddress} → ${m.address}` : m.address);
 
 const dateTimeFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
@@ -30,7 +37,7 @@ export function toCsv(header: string[], rows: Array<Array<string | number>>): st
 
 export function movementsToCsv(movements: Movement[]): string {
   return toCsv(
-    ['Data/hora', 'Usuário', 'Tipo', 'Motivo', 'SKU', 'Produto', 'Quantidade', 'Endereço'],
+    ['Data/hora', 'Usuário', 'Tipo', 'Motivo', 'SKU', 'Produto', 'Quantidade', 'Variação do saldo', 'Origem', 'Endereço'],
     movements.map((m) => [
       formatDateTime(m.at),
       m.userName,
@@ -38,7 +45,9 @@ export function movementsToCsv(movements: Movement[]): string {
       REASON_LABEL[m.reason],
       m.sku,
       m.name,
-      m.type === 'in' ? m.quantity : -m.quantity,
+      m.quantity,
+      signedQuantity(m),
+      m.fromAddress ?? '',
       m.address,
     ]),
   );
@@ -55,6 +64,8 @@ export function movementsToJson(movements: Movement[]): string {
       sku: m.sku,
       produto: m.name,
       quantidade: m.quantity,
+      variacaoSaldo: signedQuantity(m),
+      origem: m.fromAddress ?? null,
       endereco: m.address,
     })),
     null,

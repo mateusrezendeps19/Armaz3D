@@ -46,6 +46,8 @@ export interface StockState extends PersistedState {
   targetSlot: SlotAddress | null;
   /** Quando ativo, nichos vazios ficam clicáveis na cena 3D. */
   placementMode: boolean;
+  /** Transferência em preparo: item a mover e nicho de destino escolhido (null = ainda não escolhido). */
+  transfer: { itemId: string; target: SlotAddress | null } | null;
   /** Rascunho da aba Armazém (null = sem alterações). A cena mostra o rascunho como pré-visualização. */
   layoutDraft: WarehouseLayout | null;
 
@@ -57,6 +59,12 @@ export interface StockState extends PersistedState {
   adjustQuantity: (id: string, delta: number) => number;
   /** Marca o item como 'leaving'; a cena chama finalizeRemoval ao fim da animação. */
   removeItem: (id: string) => void;
+  /** Transfere o palete para um nicho livre (registra 'transfer'; a cena anima o trajeto pelo corredor). */
+  moveItem: (id: string, to: SlotAddress) => MutationResult;
+  /** Abre a escolha de destino para o item (já liga o modo de posicionamento no 3D). */
+  startTransfer: (id: string) => void;
+  setTransferTarget: (addr: SlotAddress | null) => void;
+  cancelTransfer: () => void;
   finalizeRemoval: (id: string) => void;
   markIdle: (id: string) => void;
 
@@ -115,8 +123,13 @@ function logMovement(
   type: MovementType,
   reason: MovementReason,
   quantity: number,
+  /** Endereço de origem, nas transferências (o `item` já traz o destino). */
+  from?: SlotAddress,
 ): Movement[] {
-  const rack = racks.find((r) => r.id === item.location.rackId);
+  const code = (loc: SlotAddress) => {
+    const rack = racks.find((r) => r.id === loc.rackId);
+    return rack ? addressCode(rack, loc) : '?';
+  };
   const entry: Movement = {
     id: newId(),
     type,
@@ -125,7 +138,8 @@ function logMovement(
     sku: item.sku,
     name: item.name,
     quantity,
-    address: rack ? addressCode(rack, item.location) : '?',
+    address: code(item.location),
+    ...(from && { fromAddress: code(from) }),
     at: Date.now(),
     userId: actor.id,
     userName: actor.name,
@@ -183,6 +197,16 @@ export const useStockStore = create<StockState>()(
       const patchUser = (id: string, patch: Partial<User>) =>
         set((s) => ({ users: s.users.map((u) => (u.id === id ? { ...u, ...patch } : u)) }));
       const usernameTaken = (username: string) => get().users.some((u) => u.username === username);
+      /** Motivo pelo qual o nicho não pode receber um palete (entrada ou transferência), ou null. */
+      const destinationError = (loc: SlotAddress): string | null => {
+        const rack = get().getRack(loc.rackId);
+        if (!rack) return 'Estante inexistente.';
+        if (get().isRackBlocked(rack.id)) return `A rua ${rack.aisle} está bloqueada para entradas.`;
+        if (loc.level < 0 || loc.slot < 0 || loc.level >= rack.levels || loc.slot >= rack.slotsPerLevel)
+          return 'Nicho inexistente nesta estante.';
+        if (!get().isSlotFree(loc)) return 'O nicho escolhido já está ocupado.';
+        return null;
+      };
 
       return {
         aisles: SEED_AISLES,
@@ -199,6 +223,7 @@ export const useStockStore = create<StockState>()(
         hoveredId: null,
         targetSlot: null,
         placementMode: false,
+        transfer: null,
         layoutDraft: null,
 
         addItem: (input) => {
@@ -209,12 +234,8 @@ export const useStockStore = create<StockState>()(
 
           const location = input.location ?? get().findFreeSlot();
           if (!location) return { ok: false, error: 'Não há nichos livres no galpão.' };
-          const rack = get().getRack(location.rackId);
-          if (!rack) return { ok: false, error: 'Estante inexistente.' };
-          if (get().isRackBlocked(rack.id)) return { ok: false, error: `A rua ${rack.aisle} está bloqueada para entradas.` };
-          if (location.level >= rack.levels || location.slot >= rack.slotsPerLevel)
-            return { ok: false, error: 'Nicho inexistente nesta estante.' };
-          if (!get().isSlotFree(location)) return { ok: false, error: 'O nicho escolhido já está ocupado.' };
+          const slotError = destinationError(location);
+          if (slotError) return { ok: false, error: slotError };
 
           const item: StockItem = {
             id: newId(),
@@ -278,8 +299,37 @@ export const useStockStore = create<StockState>()(
             movements: logMovement(s.movements, s.racks, user, item, 'out', 'removal', item.quantity),
             selectedId: s.selectedId === id ? null : s.selectedId,
             hoveredId: s.hoveredId === id ? null : s.hoveredId,
+            transfer: s.transfer?.itemId === id ? null : s.transfer,
           }));
         },
+
+        moveItem: (id, to) => {
+          const user = actor('stock:write');
+          if (!user) return DENIED;
+          const item = get().getItem(id);
+          if (!item || item.phase === 'leaving') return { ok: false, error: 'Item não encontrado.' };
+          if (item.phase === 'entering') return { ok: false, error: 'Aguarde o palete chegar ao nicho.' };
+          if (sameSlot(item.location, to)) return { ok: false, error: 'Escolha um nicho diferente do atual.' };
+          const slotError = destinationError(to);
+          if (slotError) return { ok: false, error: slotError };
+
+          const from = item.location;
+          const moved: StockItem = { ...item, location: { ...to } };
+          set((s) => ({
+            items: s.items.map((i) => (i.id === id ? moved : i)),
+            movements: logMovement(s.movements, s.racks, user, moved, 'transfer', 'transfer', item.quantity, from),
+            transfer: null,
+            placementMode: false,
+          }));
+          return { ok: true, id };
+        },
+
+        startTransfer: (id) => {
+          if (!actor('stock:write') || !get().getItem(id)) return;
+          set({ transfer: { itemId: id, target: null }, placementMode: true });
+        },
+        setTransferTarget: (addr) => set((s) => (s.transfer ? { transfer: { ...s.transfer, target: addr } } : {})),
+        cancelTransfer: () => set({ transfer: null, placementMode: false }),
 
         finalizeRemoval: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
 
@@ -309,6 +359,7 @@ export const useStockStore = create<StockState>()(
             targetSlot: null,
             placementMode: false,
             passwordDialogOpen: false,
+            transfer: null,
             layoutDraft: null,
           }),
 
@@ -449,7 +500,12 @@ export const useStockStore = create<StockState>()(
           return null;
         },
 
-        selectItem: (id) => set({ selectedId: id }),
+        // Selecionar outro item (ou nenhum) cancela a transferência em preparo.
+        selectItem: (id) =>
+          set((s) => {
+            const cancel = !!s.transfer && s.transfer.itemId !== id;
+            return { selectedId: id, ...(cancel && { transfer: null, placementMode: false }) };
+          }),
         hoverItem: (id) => set({ hoveredId: id }),
         setTargetSlot: (addr) => set({ targetSlot: addr }),
         setPlacementMode: (on) => set({ placementMode: on }),
@@ -457,7 +513,7 @@ export const useStockStore = create<StockState>()(
         // O modo de posicionamento só faz sentido na aba de entradas; o rascunho do layout, na aba Armazém.
         setActiveTab: (tab) => {
           if (!canOpenTab(get().getCurrentUser(), tab)) return;
-          set({ activeTab: tab, placementMode: false, layoutDraft: null });
+          set({ activeTab: tab, placementMode: false, transfer: null, layoutDraft: null });
         },
         toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
@@ -473,6 +529,7 @@ export const useStockStore = create<StockState>()(
             hoveredId: null,
             targetSlot: null,
             placementMode: false,
+            transfer: null,
             layoutDraft: null,
           });
         },

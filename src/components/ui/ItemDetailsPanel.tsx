@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Minus, PackageMinus, Plus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRightLeft, Check, Minus, PackageMinus, Plus, X } from 'lucide-react';
 import { useStockStore } from '../../store/useStockStore';
 import { usePermission } from '../../hooks/useAuth';
-import { STATUS_META, formatAddress, getOccupancy, getStatus } from '../../lib/warehouseLayout';
-import { Panel, inputClass } from './Panel';
+import { STATUS_META, addressCode, formatAddress, getOccupancy, getStatus } from '../../lib/warehouseLayout';
+import { Panel, inputClass, labelClass } from './Panel';
+import { SlotPicker } from './SlotPicker';
 
 /** Detalhes do item selecionado (ou pré-visualização do item sob o mouse). */
 export function ItemDetailsPanel() {
@@ -15,7 +16,17 @@ export function ItemDetailsPanel() {
   const removeItem = useStockStore((s) => s.removeItem);
   const selectItem = useStockStore((s) => s.selectItem);
   const canWrite = usePermission('stock:write');
+  const transfer = useStockStore((s) => s.transfer);
+  const placementMode = useStockStore((s) => s.placementMode);
+  const startTransfer = useStockStore((s) => s.startTransfer);
+  const setTransferTarget = useStockStore((s) => s.setTransferTarget);
+  const cancelTransfer = useStockStore((s) => s.cancelTransfer);
+  const setPlacementMode = useStockStore((s) => s.setPlacementMode);
+  const moveItem = useStockStore((s) => s.moveItem);
   const [amount, setAmount] = useState('10');
+  const [feedback, setFeedback] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
+  useEffect(() => setFeedback(null), [selectedId]);
 
   if (!item || !rack || item.phase === 'leaving') return null;
 
@@ -23,6 +34,16 @@ export function ItemDetailsPanel() {
   const status = getStatus(item);
   const occupancy = getOccupancy(item);
   const step = Math.max(1, Math.floor(Number(amount)) || 1);
+  const transferring = transfer?.itemId === item.id;
+
+  const confirmTransfer = () => {
+    if (!transfer?.target) return;
+    const target = transfer.target;
+    const result = moveItem(item.id, target);
+    if (!result.ok) return setFeedback({ type: 'error', text: result.error });
+    const dest = useStockStore.getState().getRack(target.rackId);
+    setFeedback({ type: 'ok', text: `Transferido para ${dest ? addressCode(dest, target) : 'o novo nicho'}.` });
+  };
 
   return (
     <Panel
@@ -79,7 +100,41 @@ export function ItemDetailsPanel() {
           {formatAddress(rack, item.location)}
         </div>
 
-        {!isPreview && canWrite && (
+        {!isPreview && canWrite && transferring && (
+          <div className="space-y-3 rounded-lg border border-cyan-500/40 bg-cyan-500/5 p-3">
+            <div>
+              <label className={labelClass}>Destino da transferência</label>
+              <SlotPicker
+                value={transfer.target}
+                onChange={setTransferTarget}
+                emptyLabel="Escolha a estante"
+                emptyHint="Escolha nas listas ou clique na cena"
+                placementMode={placementMode}
+                onTogglePlacement={() => setPlacementMode(!placementMode)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={cancelTransfer}
+                className="rounded-lg border border-slate-700 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmTransfer}
+                disabled={!transfer.target}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-cyan-500 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-40"
+              >
+                <Check size={14} />
+                Confirmar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isPreview && canWrite && !transferring && (
           <>
             <div className="flex items-center gap-2">
               <button
@@ -107,15 +162,34 @@ export function ItemDetailsPanel() {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => removeItem(item.id)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
-            >
-              <PackageMinus size={16} />
-              Retirar do estoque
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFeedback(null);
+                  startTransfer(item.id);
+                }}
+                disabled={item.phase !== 'idle'}
+                title="Mover o palete para outro nicho"
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-cyan-500/50 bg-cyan-500/10 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:opacity-40"
+              >
+                <ArrowRightLeft size={15} />
+                Transferir
+              </button>
+              <button
+                type="button"
+                onClick={() => removeItem(item.id)}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-red-500/50 bg-red-500/10 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+              >
+                <PackageMinus size={15} />
+                Retirar
+              </button>
+            </div>
           </>
+        )}
+
+        {!isPreview && feedback && (
+          <p className={`text-xs ${feedback.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>{feedback.text}</p>
         )}
       </div>
     </Panel>

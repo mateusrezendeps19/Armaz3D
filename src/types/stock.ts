@@ -86,10 +86,14 @@ export type ItemPatch = Partial<
 
 export type MutationResult = { ok: true; id: string } | { ok: false; error: string };
 
-export type MovementType = 'in' | 'out';
+/** transfer = troca de nicho dentro do galpão (não altera o saldo). */
+export type MovementType = 'in' | 'out' | 'transfer';
 
-/** receipt = entrada de palete novo · restock = reposição · withdrawal = baixa parcial · removal = retirada do palete. */
-export type MovementReason = 'receipt' | 'restock' | 'withdrawal' | 'removal';
+/**
+ * receipt = entrada de palete novo · restock = reposição · withdrawal = baixa parcial ·
+ * removal = retirada do palete · transfer = transferência entre nichos.
+ */
+export type MovementReason = 'receipt' | 'restock' | 'withdrawal' | 'removal' | 'transfer';
 
 /** Registro do histórico de entradas e saídas (snapshot do item no momento da movimentação). */
 export interface Movement {
@@ -100,8 +104,10 @@ export interface Movement {
   sku: string;
   name: string;
   quantity: number;
-  /** Código do endereço, ex.: "A-02-3-1". */
+  /** Código do endereço, ex.: "A-02-3-1". Nas transferências, o destino. */
   address: string;
+  /** Endereço de origem (só em transferências). */
+  fromAddress?: string;
   at: number;
   /** Responsável pela movimentação (null em registros anteriores ao controle de usuários). */
   userId: string | null;
